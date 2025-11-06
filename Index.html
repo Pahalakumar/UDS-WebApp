@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UDS Combined Form (4-Color Legend) — FIXED & EMBEDDED DATA</title>
+<style>
+  body {font-family:"Segoe UI",Arial,sans-serif;margin:20px;color:#222;background:#fff;}
+  h2 {
+    background:#d0e4f7;color:#0056b3;text-align:center;padding:8px;border-radius:8px;
+    margin-top:20px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.15);
+  }
+  .content {background:#e8f4fd;border-radius:10px;padding:15px;margin-top:5px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.1);} 
+  h2.collapsed + .content {display:none;}
+  .details-grid {display:grid;grid-template-columns:repeat(3,1fr);gap:12px 20px;}
+  .detail-item {background:#f9fcff;border:1px solid #cce0f7;border-radius:6px;padding:8px 10px;
+    box-shadow:0 1px 2px rgba(0,0,0,0.05);} 
+  .detail-item:nth-child(odd){background:#f2f8ff;}
+  .detail-item label{display:block;font-weight:bold;color:#004085;font-size:14px;}
+  .detail-item span{display:block;font-size:14px;color:#222;}
+  #Flat_Image{display:block;margin:20px auto;max-width:80%;border-radius:10px;
+    border:1px solid #aaa;box-shadow:0 3px 8px rgba(0,0,0,0.3);} 
+  select,button,input[type=file]{font-size:14px;padding:6px 10px;margin:8px;border-radius:6px;
+    border:1px solid #ccc;} 
+  button{background-color:#007bff;color:white;border:none;cursor:pointer;} 
+  button:hover{background-color:#0056b3;} 
+  #calcResults{text-align:center;font-weight:bold;padding:5px;} 
+  .chart-container{width:100%;height:500px;margin:20px auto;} 
+  canvas{width:100%!important;height:100%!important;} 
+  #customLegend{display:flex;justify-content:center;flex-wrap:wrap;gap:20px;font-size:14px;margin-top:-10px;} 
+  .legend-item{display:flex;align-items:center;gap:8px;} 
+  .legend-color{width:20px;height:12px;border-radius:3px;display:inline-block;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; 
+  } 
+  .sel-existing{background-color:rgba(0,180,0,0.7);} 
+  .sel-revised{background-color:rgba(0,180,0,0.5);} 
+  .unsel-existing{background-color:#1f77b4;} 
+  .unsel-revised{background-color:#ff7f0e;} 
+  #printButton{
+    position:fixed;bottom:20px;right:30px;z-index:1000;background-color:#007bff;color:white;
+    font-weight:bold;border:none;border-radius:50px;padding:12px 20px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.3);cursor:pointer;
+  }
+  #printButton:hover{background-color:#0056b3;}
+
+  /* Print-specific rules */
+  @media print {
+    #keySelector,#recordSelect,#fileInput,#printButton {display:none;}
+    body{margin:10mm;}
+    .legend-color{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #printTitle { display:block; font-size:28px; color:green; font-weight:bold; text-decoration:underline;
+      text-align:center; margin:12px 0; }
+    #printSelections { display:block; text-align:center; margin-bottom:8px; font-weight:bold; }
+  }
+
+  #printTitle, #printSelections, .print-footer { display:none; }
+
+  @media print {
+    .print-footer {
+      position:fixed;
+      bottom:0;
+      left:0;
+      right:0;
+      height:36px;
+      background:rgba(255,255,255,0.95);
+      border-top:1px solid #ccc;
+      padding:6px 12px;
+      font-size:12px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .print-footer .page-num:before { content: "Page " counter(page) " of " counter(pages); }
+  }
+</style>
+
+<style>
+  /* Styles for printing */
+  @media print {
+    .page-break {
+      page-break-before: always; /* Force a page break before this element */
+    }
+  }
+
+  /* Styles for display (optional, to visually separate content) */
+  .display-break {
+    border-top: 1px dashed #ccc; /* Add a visual separator */
+    margin-top: 20px;
+    padding-top: 20px;
+  }
+</style>
+
+</head>
+
+<body onload="initApp()">
+
+<div id="printTitle" aria-hidden="true"></div>
+<div id="printSelections" aria-hidden="true">
+  <span id="printByLabel"></span> • <span id="printRecordLabel"></span>
+</div>
+
+<h2 id="defHeader" class="collapsed">Definitions used</h2>
+<div class="content">
+  <p>TUDS = Total Un-Divided Share of the Building's Plot Plan Area. TUDS = <b>5547</b></p>
+  <p>TSA = Total Salable Area (Total Plinth area + Total Common area). TSA = <b>14946</b></p>
+  <p id="tosaDisplay"></p>
+  <p id="tbsaDisplay"></p>
+  <p>Existing Flat UDS% = (UDS of an Owner’s Flat ÷ Total_UDS) × 100</p>
+  <p>OESA = Owner’s Eligible Salable Area = TOSA × Owner_UDS%</p>
+  <p>Salable Area Difference = (Owner’s New Flat Salable Area - Owner’s Eligible Salable Area)</p>
+  <p>Owner's to pay/receive from Builder Rs = SADiff × 17500</p>
+</div>
+
+<div style="text-align:center;">
+  <label><b>Select record by:</b></label>
+  <select id="keySelector">
+    <option value="ExistingFlat#">ExistingFlat#</option>
+    <option value="NameofOwners" selected>NameofOwners</option>
+  </select>
+  <select id="recordSelect"><option value="">Select record...</option></select><br>
+  </div>
+
+<h2>Existing Flat Detail</h2>
+<div class="content" id="existing"></div>
+
+<h2>Future Flat Detail</h2>
+<div class="content" id="future"></div>
+
+
+<h2>Calculated Summary</h2>
+<div class="content" id="calcSection">
+  <div id="calcResults"></div>
+</div>
+
+
+<div class="chart-container">
+  <canvas id="udsChart"></canvas>
+</div>
+
+<div id="customLegend">
+  <div class="legend-item"><span class="legend-color sel-existing"></span> Selected Record - Existing UDS</div>
+  <div class="legend-item"><span class="legend-color sel-revised"></span> Selected Record - Revised UDS</div>
+  <div class="legend-item"><span class="legend-color unsel-existing"></span> Unselected Records - Existing UDS</div>
+  <div class="legend-item"><span class="legend-color unsel-revised"></span> Unselected Records - Revised UDS</div>
+</div>
+
+<hr style="border: 2px solid #0056b3; margin: 30px 0;">
+
+<div class="chart-container">
+  <canvas id="ownerChart"></canvas>
+</div>
+
+<button id="printButton">🖨 Print to PDF</button>
+
+<div class="print-footer" aria-hidden="true">
+  <div class="page-num"></div>
+  <div id="printDate"></div>
+  <div class="disclaimer">Disclaimer: This PDF is generated for illustrative purposes and may not be legally binding.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
+<script>
+// ---- EMBEDDED DATA START ----
+let excelData = [
+  {"ExistingOwners":"Subramanian","ExistingFloor#":"GF","ExistingFlat#":"6a","ExistingUDSinSqft":601,"ExistingUDS%":"10.83%","ExistingPlinthinSqft":860,"Address":"Door no.101,  1st floor  Front ","Type":"3BHK +2T","Carpet Area Sqft":891,"WallThickness":82,"PercentWallThickness":"9%","Plinth Sqft":973,"CommonAreaSqft":146,"SaleableAreaSqft":1118.84,"CmdaFSIsqft":973.3,"OwnerSAsqft":1119,"NameofOwners":"Subramanian","FutureFloor#":"1st Floor Front","FuturePlinthinSqft":973,"FutureSalableArea":1119,"SA_Eligibility":1133.55,"Diff_Area":-14.55,"To be paid to / by CG @ Rs.\n17500 per Sqft ":-254563,"Revised UDS":415,"Increase / Decrease in UDS":-186,"% of New UDS":"7.49%","% of Increase / Decrease":-0.31,"Flat_Image":"FrontFlatFl1toFl5.png"},
+  {"ExistingOwners":"Ganesh Kumar","ExistingFloor#":"GF","ExistingFlat#":4,"ExistingUDSinSqft":308,"ExistingUDS%":"5.55%","ExistingPlinthinSqft":470,"Address":"Door no.102,  1st floor  Middle","Type":"1BHK +2T","Carpet Area Sqft":525,"WallThickness":67,"PercentWallThickness":"13%","Plinth Sqft":592,"CommonAreaSqft":88,"SaleableAreaSqft":680.06,"CmdaFSIsqft":591.6,"OwnerSAsqft":680,"NameofOwners":"Ganesh Kumar","FutureFloor#":"1st Floor Middle","FuturePlinthinSqft":530,"FutureSalableArea":609,"SA_Eligibility":580.92,"Diff_Area":99.08,"To be paid to / by CG @ Rs.\n17500 per Sqft ":1733918,"Revised UDS":252,"Increase / Decrease in UDS":-56,"% of New UDS":"4.55%","% of Increase / Decrease":-0.18,"Flat_Image":"MiddleF1.png"},
+  {"ExistingOwners":"Prem nawaz ","ExistingFloor#":"FF","ExistingFlat#":12,"ExistingUDSinSqft":496,"ExistingUDS%":"8.94%","ExistingPlinthinSqft":680,"Address":"Door no.103,  1st floor  Rear","Type":"3BHK +2T","Carpet Area Sqft":948,"WallThickness":87,"PercentWallThickness":"9%","Plinth Sqft":1036,"CommonAreaSqft":155,"SaleableAreaSqft":1190.33,"CmdaFSIsqft":1035.5,"OwnerSAsqft":1190,"NameofOwners":"Prem nawaz ","FutureFloor#":"4th Floor Rear","FuturePlinthinSqft":905,"FutureSalableArea":1041,"SA_Eligibility":935.51,"Diff_Area":254.4941,"To be paid to / by CG @ Rs.\n17500 per Sqft ":4453647,"Revised UDS":442,"Increase / Decrease in UDS":-54,"% of New UDS":"7.96%","% of Increase / Decrease":-0.11,"Flat_Image":"RearF1.png"},
+  {"ExistingOwners":"Selvaraj","ExistingFloor#":"FF","ExistingFlat#":10,"ExistingUDSinSqft":328,"ExistingUDS%":"5.91%","ExistingPlinthinSqft":500,"Address":"Door no.201,  2nd floor   Front","Type":"3BHK +2T","Carpet Area Sqft":891,"WallThickness":82,"PercentWallThickness":"9%","Plinth Sqft":973,"CommonAreaSqft":146,"SaleableAreaSqft":1118.84,"CmdaFSIsqft":973.3,"OwnerSAsqft":1119,"NameofOwners":"Selvaraj","FutureFloor#":"2nd Floor Front","FuturePlinthinSqft":973,"FutureSalableArea":1119,"SA_Eligibility":618.64,"Diff_Area":500.36,"To be paid to / by CG @ Rs.\n17500 per Sqft ":8756283,"Revised UDS":415,"Increase / Decrease in UDS":87,"% of New UDS":"7.49%","% of Increase / Decrease":0.27,"Flat_Image":"FrontFlatFl1toFl5.png"},
+  {"ExistingOwners":"Babu Rao","ExistingFloor#":"GF","ExistingFlat#":5,"ExistingUDSinSqft":482,"ExistingUDS%":"8.69%","ExistingPlinthinSqft":735,"Address":"Door no.202,  2nd floor   Middle","Type":"2BHK +2T","Carpet Area Sqft":645,"WallThickness":77,"PercentWallThickness":"12%","Plinth Sqft":722,"CommonAreaSqft":108,"SaleableAreaSqft":829.62,"CmdaFSIsqft":721.7,"OwnerSAsqft":830,"NameofOwners":"Babu Rao","FutureFloor#":"2nd Floor Middle","FuturePlinthinSqft":721,"FutureSalableArea":829,"SA_Eligibility":909.1,"Diff_Area":-79.1,"To be paid to / by CG @ Rs.\n17500 per Sqft ":-1384259,"Revised UDS":308,"Increase / Decrease in UDS":-174,"% of New UDS":"5.55%","% of Increase / Decrease":-0.36,"Flat_Image":"MiddleFlatFl2toFl5.png"},
+  {"ExistingOwners":"Jeyachandran","ExistingFloor#":"GF","ExistingFlat#":2,"ExistingUDSinSqft":489,"ExistingUDS%":"8.82%","ExistingPlinthinSqft":745,"Address":"Door no.203,  2nd floor   Rear","Type":"2BHK +2T","Carpet Area Sqft":821,"WallThickness":84,"PercentWallThickness":"10%","Plinth Sqft":905,"CommonAreaSqft":135,"SaleableAreaSqft":1040.77,"CmdaFSIsqft":905.4,"OwnerSAsqft":1041,"NameofOwners":"Jeyachandran","FutureFloor#":"2nd Floor Rear","FuturePlinthinSqft":905,"FutureSalableArea":1041,"SA_Eligibility":922.3,"Diff_Area":118.7,"To be paid to / by CG @ Rs.\n17500 per Sqft ":2077194,"Revised UDS":386,"Increase / Decrease in UDS":-103,"% of New UDS":"6.96%","% of Increase / Decrease":-0.21,"Flat_Image":"RearFlatFl2toFl5.png"},
+  {"ExistingOwners":"Margaret","ExistingFloor#":"FF","ExistingFlat#":11,"ExistingUDSinSqft":525,"ExistingUDS%":"9.46%","ExistingPlinthinSqft":800,"Address":"Door no.301,  3rd floor   Front","Type":"3BHK +2T","Carpet Area Sqft":891,"WallThickness":82,"PercentWallThickness":"9%","Plinth Sqft":973,"CommonAreaSqft":146,"SaleableAreaSqft":1118.84,"CmdaFSIsqft":973.3,"OwnerSAsqft":1119,"NameofOwners":"Margaret","FutureFloor#":"3rd Floor Front","FuturePlinthinSqft":973,"FutureSalableArea":1119,"SA_Eligibility":990.2,"Diff_Area":128.8,"To be paid to / by CG @ Rs.\n17500 per Sqft ":2253951,"Revised UDS":415,"Increase / Decrease in UDS":-110,"% of New UDS":"7.49%","% of Increase / Decrease":-0.21,"Flat_Image":"FrontFlatFl1toFl5.png"},
+  {"ExistingOwners":"Usha","ExistingFloor#":"GF","ExistingFlat#":3,"ExistingUDSinSqft":357,"ExistingUDS%":"6.44%","ExistingPlinthinSqft":545,"Address":"Door no.302,  3rd floor   Middle","Type":"2BHK +2T","Carpet Area Sqft":645,"WallThickness":77,"PercentWallThickness":"12%","Plinth Sqft":722,"CommonAreaSqft":108,"SaleableAreaSqft":829.62,"CmdaFSIsqft":721.7,"OwnerSAsqft":830,"NameofOwners":"Usha","FutureFloor#":"3rd Floor Middle","FuturePlinthinSqft":721,"FutureSalableArea":829,"SA_Eligibility":673.34,"Diff_Area":156.66,"To be paid to / by CG @ Rs.\n17500 per Sqft ":2741587,"Revised UDS":308,"Increase / Decrease in UDS":-49,"% of New UDS":"5.55%","% of Increase / Decrease":-0.14,"Flat_Image":"MiddleFlatFl2toFl5.png"},
+  {"ExistingOwners":"Navaneethammal","ExistingFloor#":"FF","ExistingFlat#":6,"ExistingUDSinSqft":522,"ExistingUDS%":"9.41%","ExistingPlinthinSqft":795,"Address":"Door no.303,  3rd floor   Rear","Type":"2BHK +2T","Carpet Area Sqft":821,"WallThickness":84,"PercentWallThickness":"10%","Plinth Sqft":905,"CommonAreaSqft":135,"SaleableAreaSqft":1040.77,"CmdaFSIsqft":905.4,"OwnerSAsqft":1041,"NameofOwners":"Navaneethammal","FutureFloor#":"3rd Floor Rear","FuturePlinthinSqft":905,"FutureSalableArea":1041,"SA_Eligibility":984.54,"Diff_Area":56.46,"To be paid to / by CG @ Rs.\n17500 per Sqft ":987971,"Revised UDS":386,"Increase / Decrease in UDS":-136,"% of New UDS":"6.96%","% of Increase / Decrease":-0.26,"Flat_Image":"RearFlatFl2toFl5.png"},
+  {"ExistingOwners":"Bhuvanalakshmi (Paneer Selvam)","ExistingFloor#":"FF","ExistingFlat#":7,"ExistingUDSinSqft":551,"ExistingUDS%":"9.93%","ExistingPlinthinSqft":840,"Address":"Door no.401,  4th floor  Front","Type":"3BHK +2T","Carpet Area Sqft":891,"WallThickness":82,"PercentWallThickness":"9%","Plinth Sqft":973,"CommonAreaSqft":146,"SaleableAreaSqft":1118.84,"CmdaFSIsqft":973.3,"OwnerSAsqft":1119,"NameofOwners":"Bhuvanalakshmi (Paneer Selvam)","FutureFloor#":"4th Floor Front","FuturePlinthinSqft":973,"FutureSalableArea":1119,"SA_Eligibility":1039.24,"Diff_Area":79.76,"To be paid to / by CG @ Rs.\n17500 per Sqft ":1395775,"Revised UDS":415,"Increase / Decrease in UDS":-136,"% of New UDS":"7.49%","% of Increase / Decrease":-0.25,"Flat_Image":"FrontFlatFl1toFl5.png"},
+  {"ExistingOwners":"Bhuvanalakshmi (Kanagalakshmi)","ExistingFloor#":"FF","ExistingFlat#":9,"ExistingUDSinSqft":387,"ExistingUDS%":"6.98%","ExistingPlinthinSqft":560,"Address":"Door no.402,  4th floor  Middle","Type":"2BHK +2T","Carpet Area Sqft":645,"WallThickness":77,"PercentWallThickness":"12%","Plinth Sqft":722,"CommonAreaSqft":108,"SaleableAreaSqft":829.62,"CmdaFSIsqft":721.7,"OwnerSAsqft":830,"NameofOwners":"Bhuvanalakshmi (Kanagalakshmi)","FutureFloor#":"4th Floor Middle","FuturePlinthinSqft":721,"FutureSalableArea":829,"SA_Eligibility":729.92,"Diff_Area":100.08,"To be paid to / by CG @ Rs.\n17500 per Sqft ":1751384,"Revised UDS":308,"Increase / Decrease in UDS":-79,"% of New UDS":"5.55%","% of Increase / Decrease":-0.2,"Flat_Image":"MiddleFlatFl2toFl5.png"},
+  {"ExistingOwners":"CG 4th Rear","ExistingFloor#":"","ExistingFlat#":"","ExistingUDSinSqft":null,"ExistingUDS%":"","ExistingPlinthinSqft":null,"Address":"Door no.403,  4th floor  Rear","Type":"2BHK +2T","Carpet Area Sqft":821,"WallThickness":84,"PercentWallThickness":"10%","Plinth Sqft":905,"CommonAreaSqft":135,"SaleableAreaSqft":1040.77,"CmdaFSIsqft":905.4,"OwnerSAsqft":1041,"NameofOwners":"CG 4th Rear","FutureFloor#":"","FuturePlinthinSqft":null,"FutureSalableArea":null,"SA_Eligibility":null,"Diff_Area":null,"To be paid to / by CG @ Rs.\n17500 per Sqft ":null,"Revised UDS":386,"Increase / Decrease in UDS":null,"% of New UDS":"","% of Increase / Decrease":null,"Flat_Image":"RearFlatFl2toFl5.png"},
+  {"ExistingOwners":"Chellappa","ExistingFloor#":"GF","ExistingFlat#":1,"ExistingUDSinSqft":501,"ExistingUDS%":"9.03%","ExistingPlinthinSqft":765,"Address":"Door no.501,  5th floor  Front","Type":"3BHK +2T","Carpet Area Sqft":891,"WallThickness":82,"PercentWallThickness":"9%","Plinth Sqft":973,"CommonAreaSqft":146,"SaleableAreaSqft":1118.84,"CmdaFSIsqft":973.3,"OwnerSAsqft":1119,"NameofOwners":"Chellappa","FutureFloor#":"5th Floor Front","FuturePlinthinSqft":973,"FutureSalableArea":1119,"SA_Eligibility":944.94,"Diff_Area":173.9,"To be paid to / by CG @ Rs.\n17500 per Sqft ":3043228,"Revised UDS":415,"Increase / Decrease in UDS":-86,"% of New UDS":"7.49%","% of Increase / Decrease":-0.17,"Flat_Image":"FrontFlatFl1toFl5.png"},
+  {"ExistingOwners":"CG 5th Middle","ExistingFloor#":"","ExistingFlat#":"","ExistingUDSinSqft":null,"ExistingUDS%":"","ExistingPlinthinSqft":null,"Address":"Door no.502,  5th floor  Middle","Type":"2BHK +2T","Carpet Area Sqft":645,"WallThickness":77,"PercentWallThickness":"12%","Plinth Sqft":722,"CommonAreaSqft":108,"SaleableAreaSqft":829.62,"CmdaFSIsqft":721.7,"OwnerSAsqft":830,"NameofOwners":"CG 5th Middle","FutureFloor#":"","FuturePlinthinSqft":null,"FutureSalableArea":null,"SA_Eligibility":null,"Diff_Area":null,"To be paid to / by CG @ Rs.\n17500 per Sqft ":null,"Revised UDS":308,"Increase / Decrease in UDS":null,"% of New UDS":"","% of Increase / Decrease":null,"Flat_Image":"MiddleFlatFl2toFl5.png"},
+  {"ExistingOwners":"CG 5th Rear","ExistingFloor#":"","ExistingFlat#":"","ExistingUDSinSqft":null,"ExistingUDS%":"","ExistingPlinthinSqft":null,"Address":"Door no.503,  5th floor  Rear","Type":"2BHK +2T","Carpet Area Sqft":821,"WallThickness":84,"PercentWallThickness":"10%","Plinth Sqft":905,"CommonAreaSqft":135,"SaleableAreaSqft":1040.77,"CmdaFSIsqft":905.4,"OwnerSAsqft":1041,"NameofOwners":"CG 5th Rear","FutureFloor#":"","FuturePlinthinSqft":null,"FutureSalableArea":null,"SA_Eligibility":null,"Diff_Area":null,"To be paid to / by CG @ Rs.\n17500 per Sqft ":null,"Revised UDS":386,"Increase / Decrease in UDS":null,"% of New UDS":"","% of Increase / Decrease":null,"Flat_Image":"RearFlatFl2toFl5.png"}
+];
+// ---- EMBEDDED DATA END ----
+
+
+// ---- GLOBALS & INITIALIZATION (Modified) ----
+let selectedKey = 'NameofOwners';
+let myChart;
+let ownerChart;
+
+const TSA = 14946;
+const TOSA = TSA * 0.7;
+const TBSA = TSA * 0.3;
+
+function initApp() {
+  // show computed definitions values
+  document.getElementById('tosaDisplay').textContent = `Total Owner Salable Area (TOSA) = ${TOSA.toFixed(2)} Sq.ft`;
+  document.getElementById('tbsaDisplay').textContent = `Total Builder Salable Area (TBSA) = ${TBSA.toFixed(2)} Sq.ft`;
+
+  // register datalabels plugin for Chart.js
+  if (window.Chart && window.ChartDataLabels) {
+    Chart.register(ChartDataLabels);
+  }
+
+  // collapse handlers
+  document.querySelectorAll('h2').forEach(h => h.addEventListener('click', () => h.classList.toggle('collapsed')));
+
+  // event handlers
+  document.getElementById('keySelector').addEventListener('change', e => {
+    selectedKey = e.target.value;
+    populateRecordSelector();
+  });
+
+  // Print button creates a printable view and triggers print
+  document.getElementById('printButton').addEventListener('click', () => {
+    const byVal = document.getElementById('keySelector').value;
+    const recSel = document.getElementById('recordSelect');
+    const recIndex = recSel.value;
+    const recLabel = recIndex !== '' ? (recSel.options[recSel.selectedIndex].text || '') : 'No record selected';
+    document.getElementById('printByLabel').textContent = `Select record by: ${byVal}`;
+    document.getElementById('printRecordLabel').textContent = `Selected record: ${recLabel}`;
+
+    const calcHTML = document.getElementById('calcResults').innerHTML || '';
+    let titleText = '';
+    const match = calcHTML.match(/<b>Calculation Details:\s*Flat\s*([^<]*)\s*—\s*([^<]*)<\/b>/i);
+    if (match) titleText = `Calculation Details: Flat ${match[1].trim()} — ${match[2].trim()}`;
+    else {
+      const rec = excelData[Number(recIndex)] || {};
+      if (rec['ExistingFlat#'] || rec['ExistingOwners']) {
+        titleText = `Calculation Details: Flat ${rec['ExistingFlat#'] || ''} — ${rec['ExistingOwners'] || ''}`;
+      }
+    }
+    document.getElementById('printTitle').textContent = titleText;
+    document.getElementById('printTitle').style.display = titleText ? 'block' : 'none';
+    document.getElementById('printSelections').style.display = 'block';
+    document.querySelector('.print-footer').style.display = 'flex';
+    document.getElementById('printDate').textContent = new Date().toLocaleString();
+
+    try {
+      if (myChart) { myChart.options.plugins.datalabels.display = true; myChart.update(); }
+      if (ownerChart) { ownerChart.options.plugins.datalabels.display = true; ownerChart.update(); }
+    } catch (e) { /* ignore */ }
+
+    window.print();
+
+    // Revert datalabels after print
+    try {
+      if (myChart) { myChart.options.plugins.datalabels.display = false; myChart.update(); }
+      if (ownerChart) { ownerChart.options.plugins.datalabels.display = false; ownerChart.update(); }
+    } catch (e) { /* ignore */ }
+  });
+
+  // Initial data load and view setup
+  populateRecordSelector();
+}
+
+function populateRecordSelector(){
+  const recordSelect=document.getElementById('recordSelect');
+  recordSelect.innerHTML='<option value="">Select record...</option>';
+  excelData.forEach((r,i)=>{
+    // Use NameofOwners as the primary key for the dropdown text
+    const keyVal = r['NameofOwners'] || r['ExistingOwners'] || r['ExistingFlat#'] || `Record ${i+1}`;
+    if(keyVal !== undefined && keyVal.trim() !== ''){
+      const opt=document.createElement('option'); opt.value = String(i); opt.textContent = keyVal; recordSelect.appendChild(opt);
+    }
+  });
+
+  // attach change event safely
+  recordSelect.onchange = e => updateForm(e.target.value);
+
+  // if we have actual records, select the first one and show it
+  if (recordSelect.options.length > 1) {
+    recordSelect.selectedIndex = 1; // first real record
+    const idx = recordSelect.options[1].value;
+    updateForm(idx);
+  } else {
+    // clear views if no records
+    document.getElementById('existing').innerHTML = '';
+    document.getElementById('future').innerHTML = '';
+    document.getElementById('calcResults').innerHTML = '';
+    if (myChart) { myChart.destroy(); myChart = null; }
+    if (ownerChart) { ownerChart.destroy(); ownerChart = null; }
+  }
+}
+
+function updateForm(index){
+  index = Number(index);
+  if (isNaN(index) || index < 0 || index >= excelData.length) return;
+  const rec = excelData[index];
+  if(!rec) return;
+  // expand all sections except definitions
+  document.querySelectorAll('h2').forEach(h=>{ if(h.id !== 'defHeader') h.classList.remove('collapsed'); });
+  displaySections(rec);
+  calculateResults(rec);
+  renderBarChart(index);
+}
+
+function displaySections(rec){
+  const existingDiv=document.getElementById('existing');
+  const futureDiv=document.getElementById('future');
+  existingDiv.innerHTML=''; futureDiv.innerHTML='';
+  const existingFields = Object.keys(rec).filter(f => f.toLowerCase().includes('existing'));
+  // Removed 'ExistingOwners' from future fields filter to avoid duplication if it's in the NameofOwners column
+  const futureFields = Object.keys(rec).filter(f => !f.toLowerCase().includes('existing')); 
+  existingDiv.innerHTML = generateDetailsHTML(rec, existingFields);
+  futureDiv.innerHTML = generateDetailsHTML(rec, futureFields);
+  // Using the Flat_Image column name
+  const imgField = rec['Flat_Image'] || '';
+  if(imgField){
+    // In a real-world scenario, you would need to host these images alongside the HTML file.
+    // For this demonstration, we assume a local or web-accessible image path.
+    const img = document.createElement('img'); img.id='Flat_Image'; 
+    // If images are hosted online, use a full URL prefix here:
+    // img.src = 'https://your-image-host.com/' + imgField; 
+    // Assuming the images are next to the HTML file for local testing:
+    img.src = imgField; 
+    img.alt = 'Flat image';
+    futureDiv.appendChild(img);
+  }
+}
+
+function generateDetailsHTML(rec,fields){
+  if(!fields || fields.length===0) return '<div>No details available.</div>';
+  let html='<div class="details-grid">';
+  fields.forEach(f=>{
+    const val = rec[f] !== undefined && rec[f] !== null ? String(rec[f]) : '';
+    html+=`<div class="detail-item"><label>${escapeHtml(f)}</label><span>${escapeHtml(val)}</span></div>`;
+  });
+  html+='</div>';
+  return html;
+}
+
+function escapeHtml(str){
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function calculateResults(rec){
+  // read numeric values from record safely
+  const exUDS = parseFloat(rec['ExistingUDSinSqft']) || 0;
+  // Use FuturePlinthinSqft from the data, falling back to ExistingPlinthinSqft if null/zero
+  const futPlinth = parseFloat(rec['FuturePlinthinSqft']) || parseFloat(rec['ExistingPlinthinSqft']) || 0; 
+  const exPlinth = parseFloat(rec['ExistingPlinthinSqft']) || 0;
+  // Use FutureSalableArea for the new SA, falling back to SaleableAreaSqft (owner's)
+  const SalableArea = parseFloat(rec['FutureSalableArea']) || parseFloat(rec['OwnerSAsqft']) || parseFloat(rec['SaleableAreaSqft']) || 0; 
+
+  const exFlat = rec['ExistingFlat#'] || '';
+  const exFloor = rec['ExistingFloor#'] || rec['Floor#'] || '';
+  const exAddress = rec['Address'] || rec['ExistingAddress'] || '';
+  const exOwner = rec['ExistingOwners'] || rec['NameofOwners'] || '';
+
+  const plinthDiff_Area = futPlinth - exPlinth;
+  const TUDS = 5547; // constant used in your definitions
+  const ownerUDSPercent = TUDS === 0 ? 0 : (exUDS / TUDS) * 100;
+  const OESA = TOSA * (ownerUDSPercent / 100);
+  const percentStr = ownerUDSPercent.toFixed(2);
+  const oesaStr = OESA.toFixed(2);
+  const SADf = SalableArea - parseFloat(oesaStr);
+  const SADfPay = 17500 * SADf;
+
+  let summary = '';
+  summary += `<b>Calculation Details: Flat ${escapeHtml(exFlat)} — ${escapeHtml(exOwner)}</b><br><br>`;
+  summary += `Flat-${escapeHtml(exFlat)} UDS = ${exUDS} Sqft (UDS% = ${percentStr}%)<br>`;
+  summary += `OESA = TOSA × UDS% = ${TOSA.toFixed(2)} × (${percentStr}/100) = <b>${oesaStr} sq.ft.</b><br>`;
+  summary += `Owner's New Salable Area = ${SalableArea.toFixed(2)} sq.ft.<br>`;
+  summary += `Salable Area Difference (New SA - OESA) = (${SalableArea.toFixed(2)} - ${oesaStr}) = <b>${SADf.toFixed(2)}</b> sq.ft.<br>`;
+  summary += `Salable Area Difference Payment = (Rs. 17500/Sqft) × ${SADf.toFixed(2)} = Rs. <b>${SADfPay.toFixed(2)}</b><br>`;
+  
+  // Conditionally format Pay/Receive summary
+  const ownerLabel = `${escapeHtml(exOwner)}, Flat-${escapeHtml(exFlat)}`;
+  if (SADfPay < 0) {
+    summary += `<br>${ownerLabel}, to <b>Receive Rs.${Math.abs(SADfPay).toFixed(2)}</b> from Builder.<br>`;
+  } else if (SADfPay > 0) {
+    summary += `<br>${ownerLabel}, to <b>Pay Rs.${Math.abs(SADfPay).toFixed(2)}</b> to Builder.<br>`;
+  } else {
+     summary += `<br>${ownerLabel} has no Salable Area Difference Payment.<br>`;
+  }
+
+  // Plinth area difference
+  if (plinthDiff_Area > 0) summary += `<br>${ownerLabel}, Plinth area has now increased by <b>${plinthDiff_Area.toFixed(2)} sq.ft.</b><br>`;
+  else if (plinthDiff_Area < 0) summary += `<br>${ownerLabel}, Plinth decreased by <b>${Math.abs(plinthDiff_Area).toFixed(2)} sq.ft.</b><br>`;
+  else summary += `<br>${ownerLabel}'s Plinth area remains unchanged.<br>`;
+
+  document.getElementById('calcResults').innerHTML = summary;
+}
+
+function renderBarChart(selectedIndex){
+  if(!excelData.length) return;
+  selectedIndex = Number(selectedIndex);
+  if (isNaN(selectedIndex)) selectedIndex = -1;
+
+  const labels = excelData.map((r,i) => r['NameofOwners'] || r['ExistingOwners'] || `Owner ${i+1}`);
+  const existingUDS = excelData.map(r => parseFloat(r['ExistingUDSinSqft']) || 0);
+  const revisedUDS = excelData.map(r => parseFloat(r['Revised UDS']) || 0);
+  const bgExisting = existingUDS.map((v,i) => i === selectedIndex ? 'rgba(0,180,0,0.7)' : '#1f77b4');
+  const bgRevised = revisedUDS.map((v,i) => i === selectedIndex ? 'rgba(0,180,0,0.5)' : '#ff7f0e');
+
+  const ctx = document.getElementById('udsChart').getContext('2d');
+  if(myChart) myChart.destroy();
+  myChart = new Chart(ctx,{
+    type:'bar',
+    data:{labels:labels,datasets:[
+      {label:'ExistingUDSinSqft',data:existingUDS,backgroundColor:bgExisting},
+      {label:'Revised UDS',data:revisedUDS,backgroundColor:bgRevised}
+    ]},
+    options:{
+      plugins:{
+        legend:{position:'bottom'},
+        title:{display:true,text:'Existing vs Revised UDS (Sqft)',font:{size:18}},
+        datalabels:{display:false, anchor:'end',align:'end',color:'#000',font:{size:12},formatter:function(v){return Number(v).toFixed(0);}}
+      },
+      responsive:true,maintainAspectRatio:false,
+      scales:{y:{beginAtZero:true,title:{display:true,text:'UDS in Sqft'}}}
+    }
+  });
+
+  // Owner chart (bar + line)
+  const ownerSA = excelData.map(r => parseFloat(r['FutureSalableArea']) || parseFloat(r['OwnerSAsqft']) || parseFloat(r['SaleableAreaSqft']) || 0);
+  const saEligibility = excelData.map(r => {
+    const exUDS = parseFloat(r['ExistingUDSinSqft']) || 0;
+    const ownerUDSPercent = (exUDS / 5547) * 100;
+    return TOSA * (ownerUDSPercent / 100);
+  });
+
+  const ctx2 = document.getElementById('ownerChart').getContext('2d');
+  if(ownerChart) ownerChart.destroy();
+  ownerChart = new Chart(ctx2,{
+    type:'bar',
+    data:{
+      labels:labels,
+      datasets:[
+        { label:"Owner’s New Salable Area (Sqft)", data:ownerSA, backgroundColor: ownerSA.map((_,i)=> i===selectedIndex ? 'rgba(255,238,0,0.9)' : 'rgba(255,238,0,0.6)'), borderColor:'#b3b300',borderWidth:1},
+        { type:'line', label:"SA Eligibility (OESA) (Sqft)", data:saEligibility, borderColor:'#009933',borderWidth:3,tension:0.3, pointBackgroundColor:'#009933',pointRadius:4 }
+      ]
+    },
+    options:{
+      plugins:{legend:{position:'bottom'},title:{display:true,text:"Owner’s New Salable Area vs SA Eligibility (OESA)",font:{size:18}}, datalabels:{display:false}},
+      responsive:true,maintainAspectRatio:false,
+      scales:{y:{beginAtZero:true,title:{display:true,text:'Sqft'}}}
+    }
+  });
+}
+</script>
+</body>
+</html>
