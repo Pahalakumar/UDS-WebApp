@@ -3,13 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UDS Combined Form (4-Color Legend) — FIXED & EMBEDDED DATA</title>
+// <title>UDS Combined Form (4-Color Legend) — FIXED & EMBEDDED DATA</title>
 <style>
   body {font-family:"Segoe UI",Arial,sans-serif;margin:20px;color:#222;background:#fff;}
   h2 {
     background:#d0e4f7;color:#0056b3;text-align:center;padding:8px;border-radius:8px;
     margin-top:20px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.15);
   }
+
+body1 {
+    font-family: "Segoe UI", Arial, sans-serif;
+    margin: 20px;
+    color: red;
+    background: #fff;
+  }
+
   .content {background:#e8f4fd;border-radius:10px;padding:15px;margin-top:5px;
     box-shadow:0 2px 6px rgba(0,0,0,0.1);} 
   h2.collapsed + .content {display:none;}
@@ -72,7 +80,7 @@
       align-items:center;
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
-    .print-footer .page-num:before { content: "Page " counter(page) " of " counter(pages); }
+  
   }
 </style>
 
@@ -157,7 +165,7 @@
 <div class="print-footer" aria-hidden="true">
   <div class="page-num"></div>
   <div id="printDate"></div>
-  <div class="disclaimer">Disclaimer: This PDF is generated for illustrative purposes and may not be legally binding.</div>
+  <div class="disclaimer"> Disclaimer: This PDF is generated for illustrative purposes and may not be legally binding.</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -360,7 +368,7 @@ function calculateResults(rec){
   const SADfPay = 17500 * SADf;
 
   let summary = '';
-  summary += `<b>Calculation Details: Flat ${escapeHtml(exFlat)} — ${escapeHtml(exOwner)}</b><br><br>`;
+  summary += `<b><body1>Calculation Details: Flat ${escapeHtml(exFlat)} — ${escapeHtml(exOwner)}</body1></b><br><br>`;
   summary += `Flat-${escapeHtml(exFlat)} UDS = ${exUDS} Sqft (UDS% = ${percentStr}%)<br>`;
   summary += `OESA = TOSA × UDS% = ${TOSA.toFixed(2)} × (${percentStr}/100) = <b>${oesaStr} sq.ft.</b><br>`;
   summary += `Owner's New Salable Area = ${SalableArea.toFixed(2)} sq.ft.<br>`;
@@ -408,11 +416,48 @@ function renderBarChart(selectedIndex){
       plugins:{
         legend:{position:'bottom'},
         title:{display:true,text:'Existing vs Revised UDS (Sqft)',font:{size:18}},
-        datalabels:{display:false, anchor:'end',align:'end',color:'#000',font:{size:12},formatter:function(v){return Number(v).toFixed(0);}}
+        datalabels:{
+          display:true,
+          anchor:'end',
+          align:'end',
+          color:'#000',
+          font:{size:11,weight:'bold'},
+          formatter:v => v ? v.toFixed(0) : ''
+        },
+        tooltip:{
+          enabled:true,
+          mode:'index',
+          intersect:false,
+          backgroundColor:'rgba(255,255,255,0.95)',
+          titleColor:'#000',
+          titleFont:{weight:'bold'},
+          bodyColor:'#000',
+          borderColor:'#ccc',
+          borderWidth:1,
+          displayColors:true,
+          callbacks:{
+            title: function(context){
+              const index = context[0].dataIndex;
+              return 'Owner: ' + labels[index];
+            },
+            label: function(context){
+              const datasetLabel = context.dataset.label;
+              const value = context.parsed.y;
+              const color = context.dataset.backgroundColor;
+              return ' ' + datasetLabel + ': ' + value.toFixed(0) + ' sqft';
+            },
+            labelColor: function(context){
+              return { backgroundColor: context.dataset.backgroundColor, borderRadius:3 };
+            }
+          }
+        }
       },
-      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      responsive:true,
+      maintainAspectRatio:false,
       scales:{y:{beginAtZero:true,title:{display:true,text:'UDS in Sqft'}}}
-    }
+    },
+    plugins:[ChartDataLabels]
   });
 
   // Owner chart (bar + line)
@@ -430,15 +475,79 @@ function renderBarChart(selectedIndex){
     data:{
       labels:labels,
       datasets:[
-        { label:"Owner’s New Salable Area (Sqft)", data:ownerSA, backgroundColor: ownerSA.map((_,i)=> i===selectedIndex ? 'rgba(255,238,0,0.9)' : 'rgba(255,238,0,0.6)'), borderColor:'#b3b300',borderWidth:1},
-        { type:'line', label:"SA Eligibility (OESA) (Sqft)", data:saEligibility, borderColor:'#009933',borderWidth:3,tension:0.3, pointBackgroundColor:'#009933',pointRadius:4 }
+        {
+          label:"Owner’s New Salable Area (Sqft)",
+          data:ownerSA,
+          backgroundColor: ownerSA.map((_,i)=> i===selectedIndex ? 'rgba(255,238,0,0.9)' : 'rgba(255,238,0,0.6)'),
+          borderColor:'#b3b300',
+          borderWidth:1,
+          datalabels:{
+            display:true,
+            color:'#000',
+            font:{size:11,weight:'bold'},
+            formatter:v => v ? v.toFixed(0) : ''
+          }
+        },
+        {
+          type:'line',
+          label:"SA Eligibility (OESA) (Sqft)",
+          data:saEligibility,
+          borderColor:'#009933',
+          borderWidth:3,
+          tension:0.3,
+          pointBackgroundColor:'#009933',
+          pointRadius:4,
+          datalabels:{
+            display:true,
+            anchor:'end',
+            align:'start',
+            color:'#009933',
+            font:{size:12,weight:'bold'},
+            formatter:v => v ? v.toFixed(0) : ''
+          }
+        }
       ]
     },
     options:{
-      plugins:{legend:{position:'bottom'},title:{display:true,text:"Owner’s New Salable Area vs SA Eligibility (OESA)",font:{size:18}}, datalabels:{display:false}},
-      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom'},
+        title:{display:true,text:"Owner’s New Salable Area vs SA Eligibility (OESA)",font:{size:18}},
+        tooltip:{
+          enabled:true,
+          mode:'index',
+          intersect:false,
+          backgroundColor:'rgba(255,255,255,0.95)',
+          titleColor:'#000',
+          bodyColor:'#000',
+          borderColor:'#ccc',
+          borderWidth:1,
+          displayColors:true,
+          callbacks:{
+            title: function(context){
+              const index = context[0].dataIndex;
+              return 'Owner: ' + labels[index];
+            },
+            label: function(context){
+              const datasetLabel = context.dataset.label;
+              const value = context.parsed.y;
+              return ' ' + datasetLabel + ': ' + value.toFixed(0) + ' sqft';
+            },
+            labelColor: function(context){
+              if(context.dataset.type === 'line'){
+                return { backgroundColor:'#009933', borderRadius:3 };
+              } else {
+                return { backgroundColor:'#b3b300', borderRadius:3 };
+              }
+            }
+          }
+        }
+      },
+      interaction:{mode:'index',intersect:false},
+      responsive:true,
+      maintainAspectRatio:false,
       scales:{y:{beginAtZero:true,title:{display:true,text:'Sqft'}}}
-    }
+    },
+    plugins:[ChartDataLabels]
   });
 }
 </script>
