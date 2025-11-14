@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-// <title>UDS Combined Form (4-Color Legend) — FIXED & EMBEDDED DATA</title>
+// <title>UDS DATA Analytics by Dr.PK</title>
 <style>
   body {font-family:"Segoe UI",Arial,sans-serif;margin:20px;color:#222;background:#fff;}
   h2 {
@@ -223,6 +223,11 @@ function initApp() {
 
   // Print button creates a printable view and triggers print
   document.getElementById('printButton').addEventListener('click', () => {
+    const defHeader = document.getElementById('defHeader');
+    const defWasCollapsed = defHeader.classList.contains('collapsed');
+    if (defWasCollapsed) {
+      defHeader.classList.remove('collapsed');
+    }
     const byVal = document.getElementById('keySelector').value;
     const recSel = document.getElementById('recordSelect');
     const recIndex = recSel.value;
@@ -258,6 +263,9 @@ function initApp() {
       if (myChart) { myChart.options.plugins.datalabels.display = false; myChart.update(); }
       if (ownerChart) { ownerChart.options.plugins.datalabels.display = false; ownerChart.update(); }
     } catch (e) { /* ignore */ }
+    if (defWasCollapsed) {
+      defHeader.classList.add('collapsed');
+    }
   });
 
   // Initial data load and view setup
@@ -268,11 +276,21 @@ function populateRecordSelector(){
   const recordSelect=document.getElementById('recordSelect');
   recordSelect.innerHTML='<option value="">Select record...</option>';
   excelData.forEach((r,i)=>{
-    // Use NameofOwners as the primary key for the dropdown text
-    const keyVal = r['NameofOwners'] || r['ExistingOwners'] || r['ExistingFlat#'] || `Record ${i+1}`;
-    if(keyVal !== undefined && keyVal.trim() !== ''){
-      const opt=document.createElement('option'); opt.value = String(i); opt.textContent = keyVal; recordSelect.appendChild(opt);
+    const keyValRaw = r[selectedKey];
+    const keyVal = (keyValRaw !== undefined && keyValRaw !== null) ? String(keyValRaw).trim() : '';
+    const ownerName = r['NameofOwners'] || r['ExistingOwners'] || '';
+    const fallbackLabel = ownerName || (r['ExistingFlat#'] !== undefined && r['ExistingFlat#'] !== null ? `Flat ${String(r['ExistingFlat#']).trim()}` : `Record ${i+1}`);
+    let primaryLabel = keyVal || fallbackLabel;
+    const opt=document.createElement('option');
+    opt.value = String(i);
+    if (selectedKey === 'ExistingFlat#') {
+      const friendlyLabel = keyVal ? `Flat ${primaryLabel}` : 'No Flat #';
+      opt.textContent = ownerName ? `${friendlyLabel} — ${ownerName}` : (primaryLabel || friendlyLabel);
+    } else {
+      const flatNum = r['ExistingFlat#'] !== undefined && r['ExistingFlat#'] !== null ? String(r['ExistingFlat#']).trim() : '';
+      opt.textContent = flatNum ? `${primaryLabel} — Flat ${flatNum}` : primaryLabel;
     }
+    recordSelect.appendChild(opt);
   });
 
   // attach change event safely
@@ -428,11 +446,11 @@ function renderBarChart(selectedIndex){
           enabled:true,
           mode:'index',
           intersect:false,
-          backgroundColor:'rgba(255,255,255,0.95)',
+          backgroundColor:'rgba(255,255,205,0.95)',
           titleColor:'#000',
           titleFont:{weight:'bold'},
           bodyColor:'#000',
-          borderColor:'#ccc',
+          borderColor:'#black',
           borderWidth:1,
           displayColors:true,
           callbacks:{
@@ -447,7 +465,15 @@ function renderBarChart(selectedIndex){
               return ' ' + datasetLabel + ': ' + value.toFixed(0) + ' sqft';
             },
             labelColor: function(context){
-              return { backgroundColor: context.dataset.backgroundColor, borderRadius:3 };
+              const dataset = context.dataset;
+              let bg = dataset.backgroundColor;
+              if (Array.isArray(bg)) {
+                bg = bg[context.dataIndex] || '#1f77b4';
+              }
+              if (dataset.type === 'line') {
+                bg = dataset.borderColor || '#009933';
+              }
+              return { backgroundColor: bg, borderRadius:3 };
             }
           }
         }
@@ -516,10 +542,10 @@ function renderBarChart(selectedIndex){
           enabled:true,
           mode:'index',
           intersect:false,
-          backgroundColor:'rgba(255,255,255,0.95)',
+          backgroundColor:'rgba(255,205,255,0.95)',
           titleColor:'#000',
           bodyColor:'#000',
-          borderColor:'#ccc',
+          borderColor:'#black',
           borderWidth:1,
           displayColors:true,
           callbacks:{
@@ -533,10 +559,16 @@ function renderBarChart(selectedIndex){
               return ' ' + datasetLabel + ': ' + value.toFixed(0) + ' sqft';
             },
             labelColor: function(context){
-              if(context.dataset.type === 'line'){
-                return { backgroundColor:'#009933', borderRadius:3 };
+              const dataset = context.dataset;
+              if(dataset.type === 'line'){
+                const lineColor = dataset.borderColor || '#009933';
+                return { backgroundColor: lineColor, borderRadius:3 };
               } else {
-                return { backgroundColor:'#b3b300', borderRadius:3 };
+                let bg = dataset.backgroundColor;
+                if (Array.isArray(bg)) {
+                  bg = bg[context.dataIndex] || '#b3b300';
+                }
+                return { backgroundColor:bg || '#b3b300', borderRadius:3 };
               }
             }
           }
